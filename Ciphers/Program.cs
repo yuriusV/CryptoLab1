@@ -67,7 +67,7 @@ namespace Ciphers
 			return AlgoHelpers.DecodeCaesarXor(input, key);
 		}
 		
-		public static string DecodeCaesarBySpace(byte[] input) {
+		public static byte[] DecodeCaesarBySpace(byte[] input) {
 			int[] codes = new int[256];
 			for (int i = 0; i < codes.Length; i++) {
 				codes[i] = 0;
@@ -86,13 +86,12 @@ namespace Ciphers
 				}
 			}
 			
-			char maxChar = Encoding.UTF8.GetString(new byte[]{(byte)maxIndex})[0];
+			char maxChar = (char)maxIndex;
 			
-			string res = AlgoHelpers.DecodeCaesarXor(Encoding.UTF8.GetString(input), maxChar);
-			return res;
+			return AlgoHelpers.DecodeCaesarXor(input, (byte)maxChar);
 		}
 		
-		public static string DecodeVigenere(byte[] bytes, string[] words) {
+		public static string DecodeVigenere(byte[] bytes) {
 			const double engAlphabetCoefficient = 0.0667;
 			
 			var coincidenceValues = Enumerable
@@ -110,33 +109,63 @@ namespace Ciphers
 			}
 			
 			// Узнали длину ключа, будем подбирать все варианты сдвига и оценивать его качество
-			double percentOfEngToCandidate = 0.75;
-			var candidates = new List<List<Tuple<byte, byte[]>>>();
-			var resolves = new List<string>();
+			var resolves = new List<byte[]>();
 			byte[] symCodes = new byte[keyLen];
-			for (int i = 1; i <= keyLen; i++) {
-				var currentLetterCandidates = new List<Tuple<byte, byte[]>>();
-				candidates.Add(currentLetterCandidates);
-				byte[] parted = AlgoHelpers.TakeEachNSymbol(bytes, i);
+			for (int i = 0; i < keyLen; i++) {
+				byte[] parted = AlgoHelpers.TakeEachNSymbol(bytes, keyLen, i);
 				
-				//string resolved = Algo.DecodeCaesarBySpace(parted);
-				//resolves.Add(resolved);
-				for (int symCode = 1; symCode < 255; symCode++) {
-					byte[] variant = AlgoHelpers.DecodeCaesarXor(parted, (byte)symCode);
-					int count = AlgoHelpers.GetCountLetters(AlgoHelpers.BytesToString(variant));
-					if (count > percentOfEngToCandidate * variant.Length) {
-						currentLetterCandidates.Add(new Tuple<byte, byte[]>((byte)symCode, variant));
-					}
-				}
+				byte[] resolved = Algo.DecodeCaesarBySpace(parted);
+				resolves.Add(resolved);
 			}
 			
-			for (int keyIndex = 0; keyIndex < candidates.Count; keyIndex++) {
-				
-			}
-			
-			
-			return AlgoHelpers.BytesToString( AlgoHelpers.DecodeVigenere(bytes, symCodes));
+			return Encoding.UTF8.GetString(AlgoHelpers.GetCombined(resolves));
 		}
+		
+//		public static string DecodeSubstitution(string input) {
+//			const int TestLength = 6;
+//			
+//			input = input.ToLower();
+//			var testMapping = new Dictionary<char, char>() {
+//				
+//			};
+//			
+//			
+//			while (true) { // todo
+//				GetWordScore(input);
+//			}
+//		}
+//		
+//		public static string ReplaceSpaces(string input) {
+//			char charForSpace = input.Select(x => input.Count(c => ));
+//		}
+		
+		private static string MakeReplace(string input, Dictionary<char, char> mapping) {
+			foreach (var key in mapping.Keys) {
+				input = input.Replace(key, mapping[key]);
+			}
+			
+			return input;
+		}
+//		
+//		private static void MutateMapping(Dictionary<char, char> mapping) {
+//			foreach (var key in mapping.Keys) {
+//				char beforeValue = mapping[key];
+//				char generatedValue;
+//				while ((generatedValue = AlgoHelpers.GetRandomChar()) == beforeValue) {
+//					//empty	
+//				}
+//				
+//				mapping[key] = generatedValue;
+//			}
+//		}
+		
+		private static int GetWordScore(string input, string[] dictionary) {
+			//
+			//var words
+			return dictionary.Any(x => x == input) ? 1 : 0;
+		}
+		
+		
 	}
 	
 	public static class AlgoHelpers {
@@ -145,17 +174,39 @@ namespace Ciphers
 			.Concat(Enumerable.Range((int)'A', ((int)'Z') - ((int)'A')))
 			.Select(x => (char)x).ToArray();
 		
-		public static string GetCombined(List<List<byte>> resolves) {
-			var common = new List<byte>();
-			for(int i = 0; i < resolves[0].Count; i++) {
-				for(int j = 0; j < resolves.Count; j++) {
-					if (resolves[j].Count > i)
+		private static char[] _smallLetters = Enumerable.Range((int)'a', ((int)'z') - ((int)'a'))
+			.Select(x => (char)x).ToArray();
+		
+		private static Random _random = new Random();
+//		
+//		public static char GetRandomChar() {
+//			return (char)('a' + _random.Next(_smallLetters.Count));
+//		}
+		
+		public static string GetCombined(List<string> resolves) {
+			var common = new List<char>();
+			for(int i = 0; i < resolves[0].Count(); i++) {
+				for(int j = 0; j < resolves.Count(); j++) {
+					if (resolves[j].Count() > i)
 						common.Add(resolves[j][i]);
 				}
 			}
 			
-			return Encoding.UTF8.GetString(common.ToArray());
+			return new string(common.ToArray());
 		}
+		
+		public static byte[] GetCombined(List<byte[]> resolves) {
+			var common = new List<byte>();
+			for(int i = 0; i < resolves[0].Length; i++) {
+				for(int j = 0; j < resolves.Count; j++) {
+					if (resolves[j].Length > i)
+						common.Add(resolves[j][i]);
+				}
+			}
+			
+			return common.ToArray();
+		}
+		
 		
 		public static string DecodeBase64(string input) {
 			byte[] data = Convert.FromBase64String(input);
@@ -193,14 +244,14 @@ namespace Ciphers
 		
 		public static byte[] HexToByteArray(string hex) {
     		return Enumerable.Range(0, hex.Length)
-             .Where(x => x % 2 == 0)
-             .Select(x => Convert.ToByte(hex.Substring(x, 2), 16))
-             .ToArray();
+				.Where(x => x % 2 == 0)
+				.Select(x => Convert.ToByte(hex.Substring(x, 2), 16))
+				.ToArray();
 		}
 		
-		public static byte[] TakeEachNSymbol(byte[] bytes, int n) {;
+		public static byte[] TakeEachNSymbol(byte[] bytes, int n, int shift) {
 			var result = new List<byte>();
-			for(int i = n; i < bytes.Length; i += n) {
+			for(int i = shift; i < bytes.Length; i += n) {
 				result.Add(bytes[i]);
 			}
 			return result.ToArray();
@@ -215,5 +266,20 @@ namespace Ciphers
 		}
 	}
 	
+	public static class Extensions {
+		public static T MaxElement<T>(this IEnumerable<T> collection, Func<T, int> sortFunction) {
+			int max = int.MinValue;
+			T maxItem = collection.FirstOrDefault();
+			foreach (var item in collection) {
+				int score = sortFunction(item);
+				if (score > max) {
+					max = score;
+					maxItem = item;
+				}
+			}
+			
+			return maxItem;
+		}
+	}
 	
 }
